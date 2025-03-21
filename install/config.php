@@ -22,7 +22,7 @@ $aConfig = array(
 	'help_url' => 'http://feed.una.io/?section={module_name}',
 
     'compatible_with' => array(
-        '9.0.x'
+        '14.0.x'
     ),
 
     /**
