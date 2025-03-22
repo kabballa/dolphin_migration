@@ -17,12 +17,12 @@ $aConfig = array(
     'name' => 'bx_dolphin_migration',
     'title' => 'Dolphin Migration',
     'note' => 'Migration Tool',
-    'version' => '14.0.6',
+    'version' => '9.0.6',
     'vendor' => 'Boonex',
 	'help_url' => 'http://feed.una.io/?section={module_name}',
 
     'compatible_with' => array(
-        '14.0.x'
+        '9.0.x'
     ),
 
     /**
