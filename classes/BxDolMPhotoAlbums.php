@@ -58,7 +58,8 @@ class BxDolMPhotoAlbums extends BxDolMData
 			$iAlbumId = $this -> isItemExisted($aValue['ID']);			
 			if (!$iAlbumId)
 			{
-				$sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Photos';			
+				///$sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Photos';
+				///$sAlbumText = isset($aValue['Description']) && $aValue['Description'] ? $aValue['Description'] : 'No description';
 				$sQuery = $this -> _oDb -> prepare( 
 							 "
 								INSERT INTO
@@ -78,8 +79,8 @@ class BxDolMPhotoAlbums extends BxDolMData
 								$aValue['Date'] ? $aValue['Date'] : time(), 
 								$sAlbumTitle,
                                 $this -> getPrivacy($aValue['Owner'], (int)$aValue['AllowAlbumView'], 'photos', 'album_view'),
-								/// $sAlbumText,
-								$aValue['Description'],
+								$sAlbumText,
+								///$aValue['Description'],
 								$aValue['Status'] == 'active' ? 'active' : 'hidden'
 								);			
 				
