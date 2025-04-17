@@ -30,8 +30,7 @@ class BxMDb
 	var $_bErrorChecking;
     var $_aError;
 
-	///var $_sHost, $_sPort, $_sSocket, $_sDbname, $_sUser, $_sPassword, $_sCharset, $_sStorageEngine;
-	var $_sHost, $_sPort, $_sDbname, $_sUser, $_sPassword, $_sCharset, $_sStorageEngine;
+	var $_sHost, $_sPort, $_sSocket, $_sDbname, $_sUser, $_sPassword, $_sCharset, $_sStorageEngine;
 
     var $_oStatement = null;
     var $_oDbCacheObject = null;
@@ -49,7 +48,7 @@ class BxMDb
 				
 		$this->_sHost = $aDbConf['host'];
         $this->_sPort = $aDbConf['port'];
-        ///$this->_sSocket = $aDbConf['sock'];
+        $this->_sSocket = $aDbConf['sock'];
         $this->_sDbname = $aDbConf['name'];
         $this->_sUser = $aDbConf['user'];
         $this->_sPassword = $aDbConf['pwd'];
@@ -188,7 +187,7 @@ class BxMDb
     	try {
 	    	$sDsn = "mysql:host=" . $this->_sHost . ";";
 	   		$sDsn .= $this->_sPort ? "port=" . $this->_sPort . ";" : "";
-	   		///$sDsn .= $this->_sSocket ? "unix_socket=" . $this->_sSocket . ";" : "";
+	   		$sDsn .= $this->_sSocket ? "unix_socket=" . $this->_sSocket . ";" : "";
 	    	$sDsn .= "dbname=" . $this->_sDbname . ";charset=UTF8";
 
 	        self::$_rLink = new PDO($sDsn, $this->_sUser, $this->_sPassword, array(

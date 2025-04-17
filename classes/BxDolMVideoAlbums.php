@@ -11,18 +11,19 @@
 
 require_once('BxDolMData.php');
 bx_import('BxDolStorage');
-	
+
 class BxDolMVideoAlbums extends BxDolMData {		
 	/**
 	 *  @var $_iTransferredAlbums transferred albums number
 	 */	
 	private $_iTransferredAlbums;	
-	
+
 	/**
 	 *  @var $_sVideoFilesPath path to the video albums files
 	 */	
 	private $_sVideoFilesPath;
-	private $_sVideoMigField = 'vid_id';
+	/// private $_sVideoMigField = 'vid_id';
+	private $_sVideoMigField = 'id';
 
 	public function __construct(&$oMigrationModule, &$oDb)
 	{
@@ -37,7 +38,7 @@ class BxDolMVideoAlbums extends BxDolMData {
 		$aResult = $this -> _mDb -> getRow("SELECT COUNT(*) as `count`, SUM(`ObjCount`) as `obj` FROM `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name_albums'] ."` WHERE `Type` = 'bx_videos' AND `Uri` <> 'Hidden'");
 		return !(int)$aResult['count'] && !(int)$aResult['obj'] ? 0 : $aResult;
 	}
-    
+
 	public function runMigration()
 	{
 		if (!$this -> getTotalRecords())
@@ -45,7 +46,7 @@ class BxDolMVideoAlbums extends BxDolMData {
 			  $this -> setResultStatus(_t('_bx_dolphin_migration_no_data_to_transfer'));
 	          return BX_MIG_SUCCESSFUL;
 		}
-		
+
 		$this -> setResultStatus(_t('_bx_dolphin_migration_started_migration_videos'));
 		
 		$this -> createMIdField($this -> _sVideoMigField);
@@ -57,17 +58,11 @@ class BxDolMVideoAlbums extends BxDolMData {
 			$iProfileId = $this -> getProfileId((int)$aValue['Owner']);
 			if (!$iProfileId) 
 				continue;
-			
+
 			$iAlbumId = $this -> isItemExisted($aValue['ID'], 'id', $this -> _sVideoMigField);
 			if (!$iAlbumId)
 			{
-				// Sugestion start
-				// $sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Videos';	
-				$sAlbumTitle = !empty($aValue['Caption']) ? $aValue['Caption'] : 'Profile Videos';
-				// Sugestion finish
-				// Sugestion start
-				$sAlbumText = !empty($aValue['Description']) ? $aValue['Description'] : 'No description available'; // Default description if missing
-				// Sugestion finish
+				$sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Videos';			
 				$sQuery = $this -> _oDb -> prepare( 
 							 "
 								INSERT INTO
@@ -87,16 +82,13 @@ class BxDolMVideoAlbums extends BxDolMData {
 								$aValue['Date'] ? $aValue['Date'] : time(), 
 								$sAlbumTitle,
                                 $this -> getPrivacy($aValue['Owner'], (int)$aValue['AllowAlbumView'], 'videos', 'album_view'),
-								// $aValue['Description'], //original code to be replace
-								// Sugestion start
-								$sAlbumText,
-								// Sugestion finish
+								$aValue['Description'],
 								$aValue['Status'] == 'active' ? 'active' : 'hidden'
 								);			
-				
+
 					$this -> _oDb -> query($sQuery);
-					$iAlbumId = $this -> _oDb -> lastId();					
-						
+					$iAlbumId = $this -> _oDb -> lastId();
+
 					if (!$iAlbumId)
 					{
 						$this -> setResultStatus(_t('_bx_dolphin_migration_started_migration_videos_album_error'));
@@ -104,7 +96,7 @@ class BxDolMVideoAlbums extends BxDolMData {
 					}
 					
 				$this -> setMID($iAlbumId, $aValue['ID'], 'id', $this -> _sVideoMigField);
-				
+
 			}
 			
 			$iAlbumsCmts = $this -> transferComments($iAlbumId, $aValue['ID'], 'video_albums');
