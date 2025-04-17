@@ -215,7 +215,14 @@ class BxDolMProfiles extends BxDolMData
                             $this -> getPrivacy($aValue['ID'], isset($aValue['allow_view_to']) ? $aValue['allow_view_to'] : 0, '', '', $aValue['PrivacyDefaultGroup']),
 							isset($aValue['Featured']) ? (int)$aValue['Featured'] : 0,
 							isset($aValue['Views']) ? (int)$aValue['Views'] : 0,
-							isset($aValue['DescriptionMe']) && $aValue['DescriptionMe'] ? nl2br(htmlspecialchars_adv($aValue['DescriptionMe'])) : ''
+							/// isset($aValue['DescriptionMe']) && $aValue['DescriptionMe'] ? nl2br(htmlspecialchars_adv($aValue['DescriptionMe'])) : ''
+							isset($aValue['DescriptionMe']) && $aValue['DescriptionMe']
+							? preg_replace(
+								  '/<p>(\s|&nbsp;)*<\/p>/i',
+								  '<p> </p><br />' . "\r\n" . '<p>',
+								  nl2br(html_entity_decode($aValue['DescriptionMe']))
+							  )
+							: ''
 							);
 						
 						$this -> _oDb -> query($sQuery);	
