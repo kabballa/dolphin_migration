@@ -81,11 +81,7 @@ class BxDolMPhotos extends BxDolMData
                 if ($iPhotoId)
                     continue;
 
-                // $sPhotoTitle = $aValue['Title']; original code
-				// sugestion start
-				$sPhotoTitle = !empty($aValue['Title']) ? $aValue['Title'] : 'Untitled'; // Default title if missing
-				$sPhotoText = !empty($aValue['Desc']) ? $aValue['Desc'] : 'No description available'; // Default description if missing
-				//sugestion finish
+                $sPhotoTitle = $aValue['Title'];
                 $sQuery = $this -> _oDb -> prepare(
                         "
 								INSERT INTO
@@ -107,7 +103,7 @@ class BxDolMPhotos extends BxDolMData
                         $aValue['Date'] ? $aValue['Date'] : time(),
                         $sPhotoTitle,
                         $this -> getPrivacy($aValue['Owner'], (int)$aValue['AllowAlbumView'], 'photos', 'album_view'),
-                        $aPhotoText,
+                        $aValue['Desc'],
                         $aValue['admin_status'] == 'active' ? 'active' : 'hidden',
                         $aValue['status'] == 'approved' ? 'active' : 'hidden',
                         $this -> transferCategory($aValue['Categories'], 'bx_photos', 'bx_photos_cats')

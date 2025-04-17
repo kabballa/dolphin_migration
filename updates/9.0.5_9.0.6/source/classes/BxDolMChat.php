@@ -79,11 +79,6 @@ class BxDolMChat extends BxDolMData
 		$aMessages = $this -> _mDb -> getAll("SELECT * FROM `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] . "` ORDER BY `ID`");
 		foreach($aMessages as $iMes => $aMessage)
 		{
-			// Sugestion start
-			if (empty($aMessage['Message'])) {
-				$aMessage['Message'] = 'Empty message'; // Setează un mesaj implicit dacă este gol
-			}
-			// Sugestion finish
 			$iMessageId = $this -> isItemExisted($aMessage['ID'], 'id', $this -> _sMigField);
 			$iSenderId = $this -> getProfileId((int)$aMessage['Sender']);
 			if (!$iMessageId && $iSenderId)

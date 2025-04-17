@@ -49,20 +49,6 @@ class BxDolMChat extends BxDolMData
 			foreach($aUsers as $iKey => $iId)
 				$aRealProfiles[] = $this -> getProfileId($iId);			
 			
-			// new code start
-			// Asigură-te că valorile pentru titlu și participanți nu sunt goale.
-			if (empty($aRoom['Name'])) {
-				$aRoom['Name'] = 'Room_' . md5(uniqid(rand(), true)); // generează un nume unic pentru cameră
-			}
-
-			if (empty($aRealProfiles)) {
-				$aRealProfiles[] = 'Participant_' . md5(uniqid(rand(), true)); // generează un participant fals dacă lista e goală
-			}
-
-			// Adaugă un log pentru a depana
-			error_log("Title: " . $aRoom['Name'] . ", Participants: " . implode(',', $aRealProfiles));
-			// new code finish
-
 			$aParams = array('title' => $aRoom['Name'], 'parts' => implode(',', $aRealProfiles));			
 			if (!($ilotId = $this -> _oDb -> getOne("SELECT `id` FROM `bx_messenger_lots` WHERE `title` = :title AND `participants` = :parts AND `type` = 2", $aParams)))
 			{
@@ -93,11 +79,6 @@ class BxDolMChat extends BxDolMData
 		$aMessages = $this -> _mDb -> getAll("SELECT * FROM `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] . "` ORDER BY `ID`");
 		foreach($aMessages as $iMes => $aMessage)
 		{
-			// Sugestion start
-			if (empty($aMessage['Message'])) {
-				$aMessage['Message'] = 'Empty message'; // Setează un mesaj implicit
-			}
-			// Sugestion finish
 			$iMessageId = $this -> isItemExisted($aMessage['ID'], 'id', $this -> _sMigField);
 			$iSenderId = $this -> getProfileId((int)$aMessage['Sender']);
 			if (!$iMessageId && $iSenderId)

@@ -50,11 +50,6 @@ class BxDolMSimpleMessenger extends BxDolMData
 		$aMessages = $this -> _mDb -> getAll("SELECT * FROM `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] . "` ORDER BY `ID`");
 		foreach($aMessages as $iMes => $aMessage)
 		{
-			// Sugestion start
-			if (empty($aMessage['Message'])) {
-				$aMessage['Message'] = 'Empty message'; // Set default
-			}
-			// Sugestion finish
 			$iMessageId = $this -> isItemExisted($aMessage['ID']);
 			$iSenderId = $this -> getProfileId((int)$aMessage['SenderID']);
 			$iRecipientId = $this -> getProfileId((int)$aMessage['RecipientID']);

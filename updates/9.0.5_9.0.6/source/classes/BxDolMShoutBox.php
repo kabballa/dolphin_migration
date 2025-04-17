@@ -48,11 +48,6 @@ class BxDolMShoutBox extends BxDolMData
 		$aParticipantsList = array();
 		foreach($aMessages as $iMes => $aMessage)
 		{
-			// Sugestion start
-			if (empty($aMessage['Message'])) {
-				$aMessage['Message'] = 'Empty message'; // Setează un mesaj implicit dacă este gol
-			}
-			// Sugestion finish
 			$iMessageId = $this -> isItemExisted($aMessage['ID'], 'id', $this -> _sMigField);
 			$iProfileId = $this -> getProfileId((int)$aMessage['OwnerID']);
 			if (!$iProfileId)
