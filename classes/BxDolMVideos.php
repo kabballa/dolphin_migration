@@ -84,8 +84,14 @@ class BxDolMVideos extends BxDolMData
                 $iVideoId = $this -> isItemExisted($aValue['ID']);
                 if ($iVideoId)
                     continue;
+				// Sugestion start
+                // $sVideoTitle = $aValue['Title']; // original code
+				$sVideoTitle = !empty($aValue['Title']) ? $aValue['Title'] : 'Untitled Video'; // Default title if missing
+				// Sugestion finish
+				// Sugestion start
+				$sVideoText = !empty($aValue['Description']) ? $aValue['Description'] : 'No description available'; // Default description if missing
+				// Sugestion finish
 
-                $sVideoTitle = $aValue['Title'];
                 $sQuery = $this -> _oDb -> prepare(
                         "
 								INSERT INTO
@@ -107,7 +113,10 @@ class BxDolMVideos extends BxDolMData
                         $aValue['Date'] ? $aValue['Date'] : time(),
                         $sVideoTitle,
                         $this -> getPrivacy($aValue['Owner'], (int)$aValue['AllowAlbumView'], 'videos', 'album_view'),
-                        $aValue['Description'],
+						// $aValue['Description'], // original code
+						// Sugestion start
+						$sVideoText,
+						// Sugestion finish
                         $aValue['admin_status'] == 'active' ? 'active' : 'hidden',
                         $aValue['status'] == 'approved' ? 'active' : 'hidden',
                         $this -> transferCategory($aValue['Categories'], 'bx_videos', 'bx_videos_cats')
@@ -131,6 +140,10 @@ class BxDolMVideos extends BxDolMData
                			$this->transferTags((int)$aValue['ID'], $iId, $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['type'], $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['keywords']);
 						$this->transferFavorites((int)$aValue['ID'], $iId);
 						$this->transferSVotes((int)$aValue['ID'], $iId);
+						// Sugestion start
+						// Transfer the view count
+						$this->transferViews((int)$aValue['ID'], $iVideoId);
+						// Sugestion finish
 
                         $this->_oDb->query("UPDATE `bx_videos_entries` SET `comments` = :comments, `video`=:video WHERE `id` = :id", array('id' => $iVideoId, 'video' => $iId, 'comments' => $this->transferComments($iVideoId, $aValue['ID'], 'videos')));
                     }
@@ -139,6 +152,25 @@ class BxDolMVideos extends BxDolMData
 				  
 	  return $iTransferred;
    }
+
+	// Sugestion start
+	/**
+	 * Transfers the view count of a video.
+	 * @param int $iItemId original video ID
+	 * @param int $iNewID new video ID in UNA
+	 * @return boolean
+	 */
+	private function transferViews($iItemId, $iNewID) {
+		// Get the view count from RayVideoFiles
+		$aData = $this->_mDb->getRow("SELECT `Views` FROM `RayVideoFiles` WHERE `ID` = :id LIMIT 1", array('id' => $iItemId));
+		if (empty($aData))
+			return false;
+
+		// Update the view count in bx_videos_entries
+		$sQuery = $this->_oDb->prepare("UPDATE `bx_videos_entries` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewID);
+		return $this->_oDb->query($sQuery);
+	}
+	// Sugestion finish
 
     private function transferFavorites($iItemId, $iNewID){
         $aData = $this->_mDb->getRow("SELECT * FROM `bx_videos_favorites` WHERE `ID`=:id LIMIT 1", array('id' => $iItemId));
