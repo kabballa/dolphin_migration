@@ -22,6 +22,9 @@ class BxDolMProfiles extends BxDolMData
     private $_aFriendsConnections = array();
     private $_aAccounts = array();
     private $_aProfiles = array();
+    // Error counters
+    private $_iCoverErrors  = 0;
+    private $_iAvatarErrors = 0;
 
     public function __construct(&$oMigrationModule, &$mDb)
     {
@@ -423,20 +426,51 @@ class BxDolMProfiles extends BxDolMData
 		}
 	}
 
-	private function exportAvatar($iProfileId, $iContentId, $aProfileInfo)
-    {
-       $sAvatarPath = $this -> getProfileImage($aProfileInfo);
-       if($sAvatarPath)
-		{
-			$oStorage = BxDolStorage::getObjectInstance('bx_persons_pictures'); 				
-			$iId = $oStorage->storeFileFromPath($sAvatarPath, false, $iProfileId, $iContentId);
-			if ($iId)
-			{
-				$sQuery = $this -> _oDb -> prepare("UPDATE `bx_persons_data` SET `Picture` = ? WHERE `id` = ?", $iId, $iContentId);
-				$this -> _oDb -> query($sQuery);
-			}
+	private function exportAvatar($iProfileId, $iContentId, $aProfileInfo) {
+		// Removed by Coozila: original simple existence check without logging
+		/// Removed by Coozila!
+		/// $sAvatarPath = $this->getProfileImage($aProfileInfo);
+		/// if ($sAvatarPath)
+	
+		// Add by Coozila! start: get avatar path and log when missing or invalid
+		/// Add by Coozila! start
+		$sAvatarPath = $this->getProfileImage($aProfileInfo);
+		if (!$sAvatarPath || !file_exists($sAvatarPath)) {
+			BxDolLog::getInstance()->warning(
+				"exportAvatar skipped: missing or invalid avatar path, path={$sAvatarPath}, profile={$iProfileId}"
+			);
+			$this->_iAvatarErrors++; // increment error counter for missing avatar
+			return false;
 		}
-    }
+		/// Add by Coozila! finish
+	
+		// Store the avatar image in UNA storage
+		$oStorage = BxDolStorage::getObjectInstance('bx_persons_pictures');
+		$iId = $oStorage->storeFileFromPath($sAvatarPath, false, $iProfileId, $iContentId);
+	
+		// Removed by Coozila: storage check without logging
+		/// Removed by Coozila!
+		/// if ($iId)
+	
+		// Add by Coozila! start: log when storage fails
+		if (!$iId) {
+			BxDolLog::getInstance()->error(
+				"exportAvatar storage failed: path={$sAvatarPath}, profile={$iProfileId}"
+			);
+			$this->_iAvatarErrors++; // increment error counter for storage failure
+			return false;
+		}
+		/// Add by Coozila! finish
+	
+		// Update UNA profile record with new avatar ID
+		$sQuery = $this->_oDb->prepare(
+			"UPDATE `bx_persons_data` SET `Picture` = ? WHERE `id` = ?",
+			$iId, $iContentId
+		);
+		$this->_oDb->query($sQuery);
+	
+		return true;
+	}
 
 	private function isFriendExists($iProfileId, $iFriendId)
     {
