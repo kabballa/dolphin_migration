@@ -55,7 +55,15 @@ class BxDolMPhotoAlbums extends BxDolMData
 			if (!$iProfileId) 
 				continue;
 			
-			$iAlbumId = $this -> isItemExisted($aValue['ID']);			
+			// sugest start cod
+			/*
+			$iAlbumId = $this -> isItemExisted($aValue['ID']);
+			*/
+			$iAlbumId = $aValue['ID'];
+			while ($this->isItemExisted($iAlbumId)) {
+				$iAlbumId++;
+			}
+			// sugest finish cod
 			if (!$iAlbumId)
 			{
 				$sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Photos';			
