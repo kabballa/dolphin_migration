@@ -23,6 +23,13 @@ class BxDolMProfiles extends BxDolMData
     private $_aAccounts = array();
     private $_aProfiles = array();
 
+    /**
+     * Constructor.
+     * Initializes the migration module and database references.
+     *
+     * @param object $oMigrationModule Reference to the migration module
+     * @param object $mDb Reference to the database connection
+     */
     public function __construct(&$oMigrationModule, &$mDb)
     {
 		parent::__construct($oMigrationModule, $mDb);
@@ -30,11 +37,30 @@ class BxDolMProfiles extends BxDolMData
 		$this -> _sTableWithTransKey = 'sys_accounts';
     }
 
+    /**
+     * Logs a message to the migration_profiles.log file.
+     *
+     * @param string $message The message to log
+     */
+    private function logToFile($message) {
+        file_put_contents(BX_DIRECTORY_PATH_ROOT . 'migration_profiles.log', date('[Y-m-d H:i:s] ') . $message . "\n", FILE_APPEND);
+    }
+
+    /**
+     * Gets the total number of records to migrate.
+     *
+     * @return int Total number of records
+     */
 	public function getTotalRecords()
 	{
 		return (int)$this -> _mDb -> getOne("SELECT COUNT(*) FROM `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] . "`");			
 	}
 	
+    /**
+     * Runs the migration process for profiles.
+     *
+     * @return int Migration status code
+     */
 	public function runMigration()
 	{
         $this -> _sProfileCoverName = $this -> _mDb -> getParam('bx_photos_profile_cover_album_name');
@@ -85,6 +111,12 @@ class BxDolMProfiles extends BxDolMData
         return isset($this -> _aProfiles[$iAccountId]) && strcasecmp($this -> _aProfiles[$iAccountId]['fullname'], $sFullName) === 0 ? $this -> _aProfiles[$iAccountId] : false;
     }
 
+    /**
+     * Main migration logic for profiles.
+     * Handles account and profile creation or update, and related data.
+     *
+     * @return void
+     */
 	function profilesMigration()
     {
 			$this -> createMIdField();
@@ -265,11 +297,12 @@ class BxDolMProfiles extends BxDolMData
              $this->exportFriends();
     }
 
-	/**
-	* Get Avatar's image  path
-	* @param array $aProfileInfo profile information
-	* @return string
-         */ 	
+    /**
+     * Gets the avatar image path for a profile.
+     *
+     * @param array $aProfileInfo Profile information
+     * @return string|false Path to the image or false if not found
+     */
 	private function getProfileImage($aProfileInfo)
 	{	   
        $sAvatarType = $this -> _mDb -> getParam('sys_member_info_thumb');
@@ -311,7 +344,14 @@ class BxDolMProfiles extends BxDolMData
 	   return false;	 
 	}
 
-
+    /**
+     * Exports the cover photo for a profile.
+     *
+     * @param int $iProfileId Profile ID
+     * @param int $iContentId Content ID
+     * @param array $aProfileInfo Profile information
+     * @return bool False if cover not exported
+     */
 	private function exportCover($iProfileId, $iContentId, $aProfileInfo){
 	    if (!$this -> _sProfileCoverName)
             return FALSE;
@@ -361,6 +401,11 @@ class BxDolMProfiles extends BxDolMData
        return false;
     }
 
+    /**
+     * Exports friends connections for migrated profiles.
+     *
+     * @return void
+     */
 	private function exportFriends()
     {
        $sQuery = $this -> _mDb -> prepare("SELECT * FROM `sys_friend_list` WHERE `ID` <> 0 AND `Profile` <> 0");
@@ -423,6 +468,14 @@ class BxDolMProfiles extends BxDolMData
 		}
 	}
 
+    /**
+     * Exports the avatar for a profile.
+     *
+     * @param int $iProfileId Profile ID
+     * @param int $iContentId Content ID
+     * @param array $aProfileInfo Profile information
+     * @return void
+     */
 	private function exportAvatar($iProfileId, $iContentId, $aProfileInfo)
     {
        $sAvatarPath = $this -> getProfileImage($aProfileInfo);
@@ -438,6 +491,13 @@ class BxDolMProfiles extends BxDolMData
 		}
     }
 
+    /**
+     * Checks if a friendship connection already exists between two profiles.
+     *
+     * @param int $iProfileId Profile ID
+     * @param int $iFriendId Friend's Profile ID
+     * @return bool True if friendship exists, false otherwise
+     */
 	private function isFriendExists($iProfileId, $iFriendId)
     {
         if (empty($this -> _aFriendsConnections))
@@ -451,6 +511,11 @@ class BxDolMProfiles extends BxDolMData
         return false;
 	}
 	
+    /**
+     * Removes all migrated content for this module.
+     *
+     * @return int Number of records removed
+     */
 	public function removeContent()
 	{
 		if (!$this -> _oDb -> isTableExists($this -> _sTableWithTransKey) || !$this -> _oDb -> isFieldExists($this -> _sTableWithTransKey, $this -> _sTransferFieldIdent))
