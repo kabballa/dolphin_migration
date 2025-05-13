@@ -74,7 +74,8 @@ class BxDolMPhotoAlbums extends BxDolMData
 			$iAlbumId = $this -> isItemExisted($aValue['ID']);			
 			if (!$iAlbumId)
 			{
-				$sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Photos';			
+				$sAlbumTitle = isset($aValue['Caption']) && $aValue['Caption'] ? $aValue['Caption'] : 'Profile Photos';
+                // --- Add views to insert ---
 				$sQuery = $this -> _oDb -> prepare( 
 							 "
 								INSERT INTO
@@ -87,7 +88,8 @@ class BxDolMPhotoAlbums extends BxDolMData
 									`title`				= ?,
 									`allow_view_to` 	= ?,
 									`text`				= ?,
-									`status_admin`		= ?	
+									`status_admin`		= ?,
+                                    `views`             = ?
 							 ", 
 								$iProfileId, 
 								$aValue['Date'] ? $aValue['Date'] : time(), 
@@ -95,7 +97,8 @@ class BxDolMPhotoAlbums extends BxDolMData
 								$sAlbumTitle,
                                 $this -> getPrivacy($aValue['Owner'], (int)$aValue['AllowAlbumView'], 'photos', 'album_view'),
 								$aValue['Description'],
-								$aValue['Status'] == 'active' ? 'active' : 'hidden'
+								$aValue['Status'] == 'active' ? 'active' : 'hidden',
+                                isset($aValue['Views']) ? (int)$aValue['Views'] : 0
 								);			
 				
 					$this -> _oDb -> query($sQuery);
@@ -122,7 +125,7 @@ class BxDolMPhotoAlbums extends BxDolMData
         $this -> setResultStatus(_t('_bx_dolphin_migration_started_migration_photos_albums_finished', $this -> _iTransferredAlbums, $this -> _iTransferred));
         return BX_MIG_SUCCESSFUL;
     }
-   	
+
     /**
      * Migrate all photos from a Dolphin album to UNA.
      *
@@ -132,66 +135,98 @@ class BxDolMPhotoAlbums extends BxDolMData
      * @return int Number of transferred photos
      */
     private function migrateAlbumPhotos($iAlbumId, $iProfileId, $iNewAlbumID){
-			$aResult = $this -> _mDb -> getAll("SELECT * 
-													FROM  `sys_albums_objects` 
-													LEFT JOIN `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] ."` ON `id_object` = `ID`
-													WHERE  `id_album` = :album ORDER BY `id_object` ASC", array('album' => $iAlbumId));
+        $aResult = $this -> _mDb -> getAll("SELECT * 
+                                                FROM  `sys_albums_objects` 
+                                                LEFT JOIN `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] ."` ON `id_object` = `ID`
+                                                WHERE  `id_album` = :album ORDER BY `id_object` ASC", array('album' => $iAlbumId));
 
-			$iTransferred  = 0;
-			foreach($aResult as $iKey => $aValue)
-			{ 
-				$sFileName = "{$aValue['ID']}.{$aValue['Ext']}";
-			    if ($this -> isFileExisted($iProfileId, $sFileName, $aValue['Date']))
-					continue;
+        $iTransferred  = 0;
+        foreach($aResult as $iKey => $aValue)
+        { 
+            $sFileName = "{$aValue['ID']}.{$aValue['Ext']}";
+            if ($this -> isFileExisted($iProfileId, $sFileName, $aValue['Date'])) {
+                // Log: already exists
+                file_put_contents('/tmp/photo_migration.log', "Photo {$aValue['ID']} skipped: already exists in UNA\n", FILE_APPEND);
+                continue;
+            }
 
-				$sImagePath = $this -> _sImagePhotoFiles . $sFileName;
-				if (file_exists($sImagePath))
-				{
-				    $oStorage = BxDolStorage::getObjectInstance('bx_albums_files');
-					$iId = $oStorage -> storeFileFromPath($sImagePath, false, $iProfileId, $iNewAlbumID);
-					if ($iId)
-					{ 
-                        $this -> updateFilesDate($iId, $aValue['Date']);
-						
-						$sQuery = $this -> _oDb -> prepare("INSERT INTO `bx_albums_files2albums` SET `content_id` = ?, `file_id` = ?, `data` = ?, `title` = ?", $iNewAlbumID, $iId, $aValue['Size'], $aValue['Title']);
-						$this -> _oDb -> query($sQuery);
-						
-						$iCmts = $this -> transferComments($iItemId = $this -> _oDb -> lastId(), $aValue['ID'], 'photo_albums_items');
-						if ($iCmts)
-							$this -> _oDb -> query("UPDATE `bx_albums_files2albums` SET `comments` = :comments WHERE `id` = :id", array('id' => $iItemId, 'comments' => $iCmts));
-						
-						$this -> _iTransferred++;
-						$iTransferred++;
-						
-						$this -> transferTags((int)$aValue['ID'], $iId, $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['type'], $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['keywords']);
-						$this -> transferFavorites((int)$aValue['ID'], $iId);
+            $sImagePath = $this -> _sImagePhotoFiles . $sFileName;
+            if (!file_exists($sImagePath)) {
+                // Log: file missing
+                file_put_contents('/tmp/photo_migration.log', "Photo {$aValue['ID']} skipped: file missing at $sImagePath\n", FILE_APPEND);
+                continue;
+            }
 
-						 // Transfer views for photo using the new function
-                        $this->transferViews((int)$aValue['ID'], $iId);
-					}
-				}
-			}	
-				  
-	  return $iTransferred;
-   }
+            if (file_exists($sImagePath))
+            {
+                $oStorage = BxDolStorage::getObjectInstance('bx_albums_files');
+                $iId = $oStorage -> storeFileFromPath($sImagePath, false, $iProfileId, $iNewAlbumID);
+                if ($iId)
+                { 
+                    $this -> updateFilesDate($iId, $aValue['Date']);
+                    
+                    $sQuery = $this -> _oDb -> prepare("INSERT INTO `bx_albums_files2albums` SET `content_id` = ?, `file_id` = ?, `data` = ?, `title` = ?", $iNewAlbumID, $iId, $aValue['Size'], $aValue['Title']);
+                    $this -> _oDb -> query($sQuery);
+                    
+                    $iCmts = $this -> transferComments($iItemId = $this -> _oDb -> lastId(), $aValue['ID'], 'photo_albums_items');
+                    if ($iCmts)
+                        $this -> _oDb -> query("UPDATE `bx_albums_files2albums` SET `comments` = :comments WHERE `id` = :id", array('id' => $iItemId, 'comments' => $iCmts));
+                    
+                    $this -> _iTransferred++;
+                    $iTransferred++;
+                    
+                    $this -> transferTags((int)$aValue['ID'], $iId, $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['type'], $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['keywords']);
+                    $this -> transferFavorites((int)$aValue['ID'], $iId);
 
+					// Transfer album views after all photos have been processed
+					$this->transferAlbumViews($iAlbumId, $iNewAlbumID);
+
+                    // Transfer views for photo
+                    $this->transferPhotoViews((int)$aValue['ID'], $iId);
+                }
+            }
+        }
+
+
+        return $iTransferred;
+    }
+
+   	
     /**
-     * Transfer the view count of a photo from Dolphin to UNA.
+     * Transfer the view count of an album from Dolphin to UNA.
      *
-     * @param int $iItemId Original photo ID in Dolphin
-     * @param int $iNewID New photo ID in UNA
+     * @param int $iAlbumId Original album ID in Dolphin
+     * @param int $iNewAlbumId New album ID in UNA
      * @return bool True on success, false otherwise
      */
-    private function transferViews($iItemId, $iNewID) {
-        // Get the view count from bx_photos_main
-        $aData = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iItemId));
+    private function transferAlbumViews($iAlbumId, $iNewAlbumId) {
+        // Get the view count from Dolphin album
+        $aData = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iAlbumId));
         if (empty($aData))
             return false;
 
-        // Update the view count in bx_albums_files
-        $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_files` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewID);
+        // Update the view count in UNA album
+        $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_albums` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewAlbumId);
         return $this->_oDb->query($sQuery);
     }
+
+	/**
+	 * Transfer the view count of a photo from Dolphin to UNA.
+	 *
+	 * @param int $iItemId Original photo ID in Dolphin
+	 * @param int $iNewID New photo ID in UNA
+	 * @return bool True on success, false otherwise
+	 */
+	private function transferPhotoViews($iItemId, $iNewID) {
+		// Get the view count from bx_photos_main
+		$aData = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iItemId));
+		if (empty($aData))
+			return false;
+
+		// Update the view count in bx_albums_files
+		$sQuery = $this->_oDb->prepare("UPDATE `bx_albums_files` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewID);
+		return $this->_oDb->query($sQuery);
+	}
 
     /**
      * Transfer photo favorites from Dolphin to UNA.
