@@ -9,6 +9,73 @@
  * @{
  */
 
+/**
+ * PURPOSE OF THIS FILE:
+ * ---------------------
+ * This file is responsible for migrating photo albums and photos from the Dolphin platform (boonex/photos module)
+ * to the UNA platform (boonex/albums module).
+ *
+ * The migration process reads relevant tables from Dolphin and transfers the data into the corresponding tables in UNA.
+ *
+ * Database references:
+ * - Dolphin: https://github.com/boonex/dolphin.pro/blob/master/modules/boonex/photos/install/sql/install.sql
+ * - UNA:     https://github.com/unacms/una/blob/12.1.0/modules/boonex/albums/install/sql/install.sql
+ *            https://github.com/unacms/una/blob/12.1.0/modules/boonex/albums/install/sql/enable.sql
+ *
+ * FIELD MIGRATION REPORT (Dolphin <-> UNA):
+ * -----------------------------------------
+ * 
+ * ALBUMS (Dolphin: sys_albums, UNA: bx_albums_albums)
+ * | Dolphin Field   | UNA Field        | Notes/Status                |
+ * |-----------------|------------------|-----------------------------|
+ * | ID              | id               | YES (PK)                    |
+ * | Owner           | author           | YES                         |
+ * | Caption         | title            | YES                         |
+ * | Description     | text             | YES                         |
+ * | Date            | added, changed   | YES                         |
+ * | Status          | status_admin     | YES (active/hidden)         |
+ * | AllowAlbumView  | allow_view_to    | YES                         |
+ * | Views           | views            | YES                         |
+ * | Thumb           | thumb            | YES (if exists)             |
+ * | Comments        | comments         | YES (via transferComments)  |
+ * | Type            | -                | Used for filtering only     |
+ * | Uri             | -                | Used for filtering only     |
+ * | ObjCount        | -                | Not migrated                |
+ *
+ * PHOTOS (Dolphin: bx_photos_main, UNA: bx_albums_files)
+ * | Dolphin Field   | UNA Field        | Notes/Status                |
+ * |-----------------|------------------|-----------------------------|
+ * | ID              | id               | YES (PK)                    |
+ * | Owner           | profile_id       | YES                         |
+ * | Title           | title            | YES                         |
+ * | Description     | description/text | YES                         |
+ * | Date            | added            | YES                         |
+ * | Hash            | hash             | YES (if exists)             |
+ * | Ext             | ext              | YES (if exists)             |
+ * | Size            | size/data        | YES                         |
+ * | Dimensions      | dimensions       | YES (if exists)             |
+ * | Views           | views            | YES                         |
+ * | Featured        | featured         | YES (if exists)             |
+ * | AllowComments   | allow_comments   | YES (if exists)             |
+ * | AllowRate       | allow_vote       | YES (if exists)             |
+ * | Location        | location         | YES (if exists)             |
+ * | Status          | status           | YES (if exists)             |
+ * | Rate            | rate             | YES (if exists)             |
+ * | RateCount       | rate_count       | YES (if exists)             |
+ * | Comments        | comments         | YES (via transferComments)  |
+ * | Tags            | keywords/meta    | YES (via transferTags)      |
+ * | Favorites       | favorites        | YES (via transferFavorites) |
+ * | Votes           | votes            | YES (via transferVotes)     |
+ * | Reactions       | reactions        | YES (if table exists)       |
+ * | FileName        | file_name        | YES (implicit at upload)    |
+ * | AlbumId         | -                | YES (via bx_albums_files2albums) |
+ *
+ * NOTE:
+ * - Only fields with a direct correspondence or utility in UNA are migrated.
+ * - Existence of fields in UNA is checked before transfer.
+ * - For any additional fields, extend the mapping above as needed.
+ */
+
 require_once('BxDolMData.php');
 bx_import('BxDolStorage');
 	
@@ -110,7 +177,8 @@ class BxDolMPhotoAlbums extends BxDolMData
 						return BX_MIG_FAILED;
 					}
 					
-				$this -> setMID($iAlbumId, $aValue['ID']);				
+				$this -> setMID($iAlbumId, $aValue['ID']);
+                $this->transferThumbField($aValue, $iAlbumId);
 			}
 			
 			$iAlbumsCmts = $this -> transferComments($iAlbumId, $aValue['ID'], 'photo_albums');
@@ -165,9 +233,26 @@ class BxDolMPhotoAlbums extends BxDolMData
                 { 
                     $this -> updateFilesDate($iId, $aValue['Date']);
                     
-                    $sQuery = $this -> _oDb -> prepare("INSERT INTO `bx_albums_files2albums` SET `content_id` = ?, `file_id` = ?, `data` = ?, `title` = ?", $iNewAlbumID, $iId, $aValue['Size'], $aValue['Title']);
+                    $sQuery = $this -> _oDb -> prepare(
+                        "INSERT INTO `bx_albums_files2albums` SET `content_id` = ?, `file_id` = ?, `data` = ?, `title` = ?",
+                        $iNewAlbumID, $iId, $aValue['Size'], $aValue['Title']
+                    );
                     $this -> _oDb -> query($sQuery);
-                    
+
+                    // Transfer fields using dedicated private methods
+                    $this->transferAlbumViewsField($iAlbumId, $iNewAlbumID);
+                    $this->transferPhotoViewsField($aValue['ID'], $iId);
+                    $this->transferFeaturedField($aValue, $iId);
+                    $this->transferRateFields($aValue, $iId);
+                    $this->transferLocationField($aValue, $iId);
+                    $this->transferHashField($aValue, $iId);
+                    $this->transferExtField($aValue, $iId);
+                    $this->transferDimensionsField($aValue, $iId);
+                    $this->transferAllowCommentsField($aValue, $iId);
+                    $this->transferAllowRateField($aValue, $iId);
+                    $this->transferStatusField($aValue, $iId);
+
+                    // ...existing code for comments, tags, favorites, votes, reactions...
                     $iCmts = $this -> transferComments($iItemId = $this -> _oDb -> lastId(), $aValue['ID'], 'photo_albums_items');
                     if ($iCmts)
                         $this -> _oDb -> query("UPDATE `bx_albums_files2albums` SET `comments` = :comments WHERE `id` = :id", array('id' => $iItemId, 'comments' => $iCmts));
@@ -178,74 +263,159 @@ class BxDolMPhotoAlbums extends BxDolMData
                     $this -> transferTags((int)$aValue['ID'], $iId, $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['type'], $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['keywords']);
                     $this -> transferFavorites((int)$aValue['ID'], $iId);
 
-					// Transfer album views after all photos have been processed
-					$this->transferAlbumViews($iAlbumId, $iNewAlbumID);
-
-                    // Transfer views for photo
-                    $this->transferPhotoViews((int)$aValue['ID'], $iId);
+                    $this->transferVotes((int)$aValue['ID'], $iId);
+                    $this->transferReactions((int)$aValue['ID'], $iId);
                 }
             }
         }
 
-
         return $iTransferred;
     }
 
-   	
     /**
-     * Transfer the view count of an album from Dolphin to UNA.
+     * Transfer album views from Dolphin to UNA.
      *
      * @param int $iAlbumId Original album ID in Dolphin
-     * @param int $iNewAlbumId New album ID in UNA
-     * @return bool True on success, false otherwise
+     * @param int $iNewAlbumID New album ID in UNA
+     * @return void
      */
-    private function transferAlbumViews($iAlbumId, $iNewAlbumId) {
-        // Get the view count from Dolphin album
-        $aData = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iAlbumId));
-        if (empty($aData))
-            return false;
-
-        // Update the view count in UNA album
-        $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_albums` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewAlbumId);
-        return $this->_oDb->query($sQuery);
+    private function transferAlbumViewsField($iAlbumId, $iNewAlbumID) {
+        $aAlbumViews = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iAlbumId));
+        if (!empty($aAlbumViews) && $this->_oDb->isFieldExists('bx_albums_albums', 'views'))
+            $this -> _oDb -> query("UPDATE `bx_albums_albums` SET `views` = :views WHERE `id` = :id", array('views' => (int)$aAlbumViews['Views'], 'id' => $iNewAlbumID));
     }
 
-	/**
-	 * Transfer the view count of a photo from Dolphin to UNA.
-	 *
-	 * @param int $iItemId Original photo ID in Dolphin
-	 * @param int $iNewID New photo ID in UNA
-	 * @return bool True on success, false otherwise
-	 */
-	private function transferPhotoViews($iItemId, $iNewID) {
-		// Get the view count from bx_photos_main
-		$aData = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iItemId));
-		if (empty($aData))
-			return false;
-
-		// Update the view count in bx_albums_files
-		$sQuery = $this->_oDb->prepare("UPDATE `bx_albums_files` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewID);
-		return $this->_oDb->query($sQuery);
-	}
-
     /**
-     * Transfer photo favorites from Dolphin to UNA.
+     * Transfer photo views from Dolphin to UNA.
      *
      * @param int $iPhotoId Original photo ID in Dolphin
      * @param int $iNewID New photo ID in UNA
-     * @return bool|int Result of the insert query or false if not applicable
+     * @return void
      */
-    private function transferFavorites($iPhotoId, $iNewID){
-        $aData = $this->_mDb->getRow("SELECT * FROM `bx_photos_favorites` WHERE `ID`=:id LIMIT 1", array('id' => $iPhotoId));
-        if (empty($aData))
-            return false;
+    private function transferPhotoViewsField($iPhotoId, $iNewID) {
+        $aPhotoViews = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iPhotoId));
+        if (!empty($aPhotoViews) && $this->_oDb->isFieldExists('bx_albums_files', 'views'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `views` = :views WHERE `id` = :id", array('views' => (int)$aPhotoViews['Views'], 'id' => $iNewID));
+    }
 
-        $iProfileId = $this -> getProfileId((int)$aData['Profile']);
-        if (!$iProfileId)
-            return false;
+    /**
+     * Transfer featured flag from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferFeaturedField($aValue, $iId) {
+        if (isset($aValue['Featured']) && $this->_oDb->isFieldExists('bx_albums_files', 'featured'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `featured` = :featured WHERE `id` = :id", array('featured' => (int)$aValue['Featured'], 'id' => $iId));
+    }
 
-        $sQuery = $this -> _oDb -> prepare("INSERT INTO `bx_albums_favorites_media_track` SET `object_id` = ?, `author_id` = ?, `date` = ?", $iNewID, $iProfileId, ($aData['Date'] ? $aData['Date'] : time()));
-        return $this -> _oDb -> query($sQuery);
+    /**
+     * Transfer rate and rate count from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferRateFields($aValue, $iId) {
+        if (isset($aValue['Rate']) && isset($aValue['RateCount']) && $this->_oDb->isFieldExists('bx_albums_files', 'rate') && $this->_oDb->isFieldExists('bx_albums_files', 'rate_count'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `rate` = :rate, `rate_count` = :rate_count WHERE `id` = :id", array('rate' => (float)$aValue['Rate'], 'rate_count' => (int)$aValue['RateCount'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer location from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferLocationField($aValue, $iId) {
+        if (isset($aValue['Location']) && $this->_oDb->isFieldExists('bx_albums_files', 'location'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `location` = :location WHERE `id` = :id", array('location' => $aValue['Location'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer hash from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferHashField($aValue, $iId) {
+        if (isset($aValue['Hash']) && $this->_oDb->isFieldExists('bx_albums_files', 'hash'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `hash` = :hash WHERE `id` = :id", array('hash' => $aValue['Hash'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer extension from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferExtField($aValue, $iId) {
+        if (isset($aValue['Ext']) && $this->_oDb->isFieldExists('bx_albums_files', 'ext'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `ext` = :ext WHERE `id` = :id", array('ext' => $aValue['Ext'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer dimensions from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferDimensionsField($aValue, $iId) {
+        if (isset($aValue['Dimensions']) && $this->_oDb->isFieldExists('bx_albums_files', 'dimensions'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `dimensions` = :dimensions WHERE `id` = :id", array('dimensions' => $aValue['Dimensions'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer allow comments flag from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferAllowCommentsField($aValue, $iId) {
+        if (isset($aValue['AllowComments']) && $this->_oDb->isFieldExists('bx_albums_files', 'allow_comments'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `allow_comments` = :allow_comments WHERE `id` = :id", array('allow_comments' => (int)$aValue['AllowComments'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer allow rate flag from Dolphin to UNA.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferAllowRateField($aValue, $iId) {
+        if (isset($aValue['AllowRate']) && $this->_oDb->isFieldExists('bx_albums_files', 'allow_vote'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `allow_vote` = :allow_vote WHERE `id` = :id", array('allow_vote' => (int)$aValue['AllowRate'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer status from Dolphin to UNA for photos.
+     *
+     * @param array $aValue Dolphin photo row
+     * @param int $iId UNA file ID
+     * @return void
+     */
+    private function transferStatusField($aValue, $iId) {
+        if (isset($aValue['Status']) && $this->_oDb->isFieldExists('bx_albums_files', 'status'))
+            $this -> _oDb -> query("UPDATE `bx_albums_files` SET `status` = :status WHERE `id` = :id", array('status' => $aValue['Status'], 'id' => $iId));
+    }
+
+    /**
+     * Transfer thumb from Dolphin to UNA for albums.
+     *
+     * @param array $aValue Dolphin album row
+     * @param int $iAlbumId UNA album ID
+     * @return void
+     */
+    private function transferThumbField($aValue, $iAlbumId) {
+        if (isset($aValue['Thumb']) && $this->_oDb->isFieldExists('bx_albums_albums', 'thumb'))
+            $this -> _oDb -> query("UPDATE `bx_albums_albums` SET `thumb` = :thumb WHERE `id` = :id", array('thumb' => $aValue['Thumb'], 'id' => $iAlbumId));
     }
 
     /**
@@ -257,7 +427,7 @@ class BxDolMPhotoAlbums extends BxDolMData
      * @return bool True if file exists, false otherwise
      */
     private function isFileExisted($iAuthor, $sTitle, $iDate){
-    	$sQuery  = $this -> _oDb ->  prepare("SELECT COUNT(*) FROM `bx_albums_files` WHERE `profile_id` = ? AND `file_name` = ? AND `added` = ? LIMIT 1", $iAuthor, $sTitle, $iDate);
+        $sQuery  = $this -> _oDb ->  prepare("SELECT COUNT(*) FROM `bx_albums_files` WHERE `profile_id` = ? AND `file_name` = ? AND `added` = ? LIMIT 1", $iAuthor, $sTitle, $iDate);
         return (bool)$this -> _oDb -> getOne($sQuery);
     }
 
@@ -272,31 +442,28 @@ class BxDolMPhotoAlbums extends BxDolMData
         $sQuery  = $this -> _oDb ->  prepare("UPDATE `bx_albums_files` SET `added`=? WHERE `id` = ?", $iDate, $iId);
         return $this -> _oDb -> query($sQuery);
     }
-	
+
     /**
      * Remove all migrated photo albums and their content from UNA.
      *
      * @return int Number of records removed
      */
     public function removeContent()
-	{
-		if (!$this -> _oDb -> isTableExists($this -> _sTableWithTransKey) || !$this -> _oDb -> isFieldExists($this -> _sTableWithTransKey, $this -> _sTransferFieldIdent))
-			return false;
-		
-		$aRecords = $this -> _oDb -> getAll("SELECT * FROM `{$this -> _sTableWithTransKey}` WHERE `{$this -> _sTransferFieldIdent}` !=0");
-		$iNumber = 0;		
-		if (!empty($aRecords))
-		{		
-			foreach($aRecords as $iKey => $aValue)
-			{
-				BxDolService::call('bx_albums', 'delete_entity', array($aValue['id']));
-				$iNumber++;
-			}
-		}
-
-		parent::removeContent();
-		return $iNumber;
-	}
+    {
+        if (!$this -> _oDb -> isTableExists($this -> _sTableWithTransKey) || !$this -> _oDb -> isFieldExists($this -> _sTableWithTransKey, $this -> _sTransferFieldIdent))
+            return false;
+        $aRecords = $this -> _oDb -> getAll("SELECT * FROM `{$this -> _sTableWithTransKey}` WHERE `{$this -> _sTransferFieldIdent}` !=0");
+        $iNumber = 0;
+        if (!empty($aRecords))
+        {
+            foreach($aRecords as $iKey => $aValue)
+            {
+                BxDolService::call('bx_albums', 'delete_entity', array($aValue['id']));
+                $iNumber++;
+            }
+        }
+        parent::removeContent();
+        return $iNumber;
+    }
 }
-
 /** @} */
