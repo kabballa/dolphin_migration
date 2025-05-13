@@ -14,26 +14,42 @@ bx_import('BxDolStorage');
 	
 class BxDolMPhotoAlbums extends BxDolMData
 {
-	/**
-	*  @var $_iTransferredAlbums transferred albums number
-	*/
-	private $_iTransferredAlbums;
+    /**
+     * @var int $_iTransferredAlbums Number of transferred albums
+     */
+    private $_iTransferredAlbums;
     
-	public function __construct(&$oMigrationModule, &$oDb)
-	{
+    /**
+     * Constructor.
+     *
+     * @param object $oMigrationModule Reference to the migration module
+     * @param object $oDb Reference to the database connection
+     */
+    public function __construct(&$oMigrationModule, &$oDb)
+    {
         parent::__construct($oMigrationModule, $oDb);
 		$this -> _sModuleName = 'photos_albums';
 		$this -> _sTableWithTransKey = 'bx_albums_albums';
     }
 	
-	public function getTotalRecords()
-	{
+    /**
+     * Get total number of photo albums and photos to migrate.
+     *
+     * @return array|int Returns array with count and obj or 0 if none found
+     */
+    public function getTotalRecords()
+    {
         $aResult = $this -> _mDb -> getRow("SELECT COUNT(*) as `count`, SUM(`ObjCount`) as `obj` FROM `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name_albums'] ."` WHERE `Type` = 'bx_photos' AND `Uri` <> 'Hidden'");
 		return !(int)$aResult['count'] && !(int)$aResult['obj'] ? 0 : $aResult;
 	}
     
-	public function runMigration()
-	{
+    /**
+     * Run the migration process for photo albums and their photos.
+     *
+     * @return int Migration status code
+     */
+    public function runMigration()
+    {
 		if (!$this -> getTotalRecords())
 		{
 			  $this -> setResultStatus(_t('_bx_dolphin_migration_no_data_to_transfer'));
@@ -107,14 +123,15 @@ class BxDolMPhotoAlbums extends BxDolMData
         return BX_MIG_SUCCESSFUL;
     }
    	
-   /**
-	* Migrates all photo albums and users photos
-	* @param int $iAlbumId original albums id
-	* @param int $iProfileId una profile ID
-	* @param int $iNewAlbumID created una Album		
-	* @return Integer
-         */  
-   private function migrateAlbumPhotos($iAlbumId, $iProfileId, $iNewAlbumID){
+    /**
+     * Migrate all photos from a Dolphin album to UNA.
+     *
+     * @param int $iAlbumId Original album ID in Dolphin
+     * @param int $iProfileId UNA profile ID
+     * @param int $iNewAlbumID Newly created UNA album ID
+     * @return int Number of transferred photos
+     */
+    private function migrateAlbumPhotos($iAlbumId, $iProfileId, $iNewAlbumID){
 			$aResult = $this -> _mDb -> getAll("SELECT * 
 													FROM  `sys_albums_objects` 
 													LEFT JOIN `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] ."` ON `id_object` = `ID`
@@ -148,6 +165,9 @@ class BxDolMPhotoAlbums extends BxDolMData
 						
 						$this -> transferTags((int)$aValue['ID'], $iId, $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['type'], $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['keywords']);
 						$this -> transferFavorites((int)$aValue['ID'], $iId);
+
+						 // Transfer views for photo using the new function
+                        $this->transferViews((int)$aValue['ID'], $iId);
 					}
 				}
 			}	
@@ -155,6 +175,31 @@ class BxDolMPhotoAlbums extends BxDolMData
 	  return $iTransferred;
    }
 
+    /**
+     * Transfer the view count of a photo from Dolphin to UNA.
+     *
+     * @param int $iItemId Original photo ID in Dolphin
+     * @param int $iNewID New photo ID in UNA
+     * @return bool True on success, false otherwise
+     */
+    private function transferViews($iItemId, $iNewID) {
+        // Get the view count from bx_photos_main
+        $aData = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iItemId));
+        if (empty($aData))
+            return false;
+
+        // Update the view count in bx_albums_files
+        $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_files` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewID);
+        return $this->_oDb->query($sQuery);
+    }
+
+    /**
+     * Transfer photo favorites from Dolphin to UNA.
+     *
+     * @param int $iPhotoId Original photo ID in Dolphin
+     * @param int $iNewID New photo ID in UNA
+     * @return bool|int Result of the insert query or false if not applicable
+     */
     private function transferFavorites($iPhotoId, $iNewID){
         $aData = $this->_mDb->getRow("SELECT * FROM `bx_photos_favorites` WHERE `ID`=:id LIMIT 1", array('id' => $iPhotoId));
         if (empty($aData))
@@ -168,17 +213,37 @@ class BxDolMPhotoAlbums extends BxDolMData
         return $this -> _oDb -> query($sQuery);
     }
 
-	private function isFileExisted($iAuthor, $sTitle, $iDate){
+    /**
+     * Check if a file already exists in UNA for a given author, file name, and date.
+     *
+     * @param int $iAuthor UNA profile ID
+     * @param string $sTitle File name
+     * @param int $iDate File date (timestamp)
+     * @return bool True if file exists, false otherwise
+     */
+    private function isFileExisted($iAuthor, $sTitle, $iDate){
     	$sQuery  = $this -> _oDb ->  prepare("SELECT COUNT(*) FROM `bx_albums_files` WHERE `profile_id` = ? AND `file_name` = ? AND `added` = ? LIMIT 1", $iAuthor, $sTitle, $iDate);
         return (bool)$this -> _oDb -> getOne($sQuery);
     }
 
+    /**
+     * Update the added date for a file in UNA.
+     *
+     * @param int $iId File ID in UNA
+     * @param int $iDate New date (timestamp)
+     * @return bool|int Result of the update query
+     */
     private function updateFilesDate($iId, $iDate){
         $sQuery  = $this -> _oDb ->  prepare("UPDATE `bx_albums_files` SET `added`=? WHERE `id` = ?", $iDate, $iId);
         return $this -> _oDb -> query($sQuery);
     }
 	
-	public function removeContent()
+    /**
+     * Remove all migrated photo albums and their content from UNA.
+     *
+     * @return int Number of records removed
+     */
+    public function removeContent()
 	{
 		if (!$this -> _oDb -> isTableExists($this -> _sTableWithTransKey) || !$this -> _oDb -> isFieldExists($this -> _sTableWithTransKey, $this -> _sTransferFieldIdent))
 			return false;
