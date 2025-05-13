@@ -213,57 +213,54 @@ class BxDolMPhotoAlbums extends BxDolMData
      * @param int $iNewAlbumID Newly created UNA album ID
      * @return int Number of transferred photos
      */
-    private function migrateAlbumPhotos($iAlbumId, $iProfileId, $iNewAlbumID){
-        $aResult = $this -> _mDb -> getAll("SELECT * 
-                                                FROM  `sys_albums_objects` 
-                                                LEFT JOIN `" . $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['table_name'] ."` ON `id_object` = `ID`
-                                                WHERE  `id_album` = :album ORDER BY `id_object` ASC", array('album' => $iAlbumId));
+    private function migrateAlbumPhotos($iAlbumId, $iProfileId, $iNewAlbumID) {
+        $aResult = $this->_mDb->getAll("SELECT * 
+                                        FROM `sys_albums_objects` 
+                                        LEFT JOIN `" . $this->_oConfig->_aMigrationModules[$this->_sModuleName]['table_name'] . "` ON `id_object` = `ID`
+                                        WHERE `id_album` = :album ORDER BY `id_object` ASC", array('album' => $iAlbumId));
 
-        $iTransferred  = 0;
-        foreach($aResult as $iKey => $aValue)
-        {
+        $iTransferred = 0;
+        foreach ($aResult as $aValue) {
             try {
                 $sFileName = "{$aValue['ID']}.{$aValue['Ext']}";
-                if ($this -> isFileExisted($iProfileId, $sFileName, $aValue['Date']))
+                if ($this->isFileExisted($iProfileId, $sFileName, $aValue['Date']))
                     continue;
 
-                $sImagePath = $this -> _sImagePhotoFiles . $sFileName;
+                $sImagePath = $this->_sImagePhotoFiles . $sFileName;
                 if (!file_exists($sImagePath))
                     continue;
 
                 $oStorage = BxDolStorage::getObjectInstance('bx_albums_files');
-                $iId = $oStorage -> storeFileFromPath($sImagePath, false, $iProfileId, $iNewAlbumID);
-                if ($iId)
-                {
-                    $this -> updateFilesDate($iId, $aValue['Date']);
+                $iId = $oStorage->storeFileFromPath($sImagePath, false, $iProfileId, $iNewAlbumID);
+                if ($iId) {
+                    $this->updateFilesDate($iId, $aValue['Date']);
 
-                    $sQuery = $this -> _oDb -> prepare("INSERT INTO `bx_albums_files2albums` SET `content_id` = ?, `file_id` = ?, `data` = ?, `title` = ?", $iNewAlbumID, $iId, $aValue['Size'], $aValue['Title']);
-                    $this -> _oDb -> query($sQuery);
+                    $sQuery = $this->_oDb->prepare("INSERT INTO `bx_albums_files2albums` SET `content_id` = ?, `file_id` = ?, `data` = ?, `title` = ?", $iNewAlbumID, $iId, $aValue['Size'], $aValue['Title']);
+                    $this->_oDb->query($sQuery);
 
-                    // Transfer extra photo fields, ignore errors if any
-                    try { $this->transferPhotoViewsField($aValue['ID'], $iId); } catch (\Exception $e) {}
-                    try { $this->transferFeaturedField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferRateFields($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferLocationField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferHashField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferExtField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferDimensionsField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferAllowCommentsField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferAllowRateField($aValue, $iId); } catch (\Exception $e) {}
-                    try { $this->transferStatusField($aValue, $iId); } catch (\Exception $e) {}
+                    // Transfer fields using private functions
+                    $this->transferPhotoViewsField($aValue['ID'], $iId);
+                    $this->transferFeaturedField($aValue, $iId);
+                    $this->transferRateFields($aValue, $iId);
+                    $this->transferLocationField($aValue, $iId);
+                    $this->transferHashField($aValue, $iId);
+                    $this->transferExtField($aValue, $iId);
+                    $this->transferDimensionsField($aValue, $iId);
+                    $this->transferAllowCommentsField($aValue, $iId);
+                    $this->transferAllowRateField($aValue, $iId);
+                    $this->transferStatusField($aValue, $iId);
 
-                    $iCmts = 0;
-                    try { $iCmts = $this -> transferComments($iId, $aValue['ID'], 'photo_albums_items'); } catch (\Exception $e) {}
+                    $iCmts = $this->transferComments($iId, $aValue['ID'], 'photo_albums_items');
                     if ($iCmts)
-                        $this -> _oDb -> query("UPDATE `bx_albums_files` SET `comments` = :comments WHERE `id` = :id", array('id' => $iId, 'comments' => $iCmts));
+                        $this->_oDb->query("UPDATE `bx_albums_files` SET `comments` = :comments WHERE `id` = :id", array('id' => $iId, 'comments' => $iCmts));
 
-                    $this -> _iTransferred++;
+                    $this->_iTransferred++;
                     $iTransferred++;
 
-                    try { $this -> transferTags((int)$aValue['ID'], $iId, $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['type'], $this -> _oConfig -> _aMigrationModules[$this -> _sModuleName]['keywords']); } catch (\Exception $e) {}
-                    try { $this -> transferFavorites((int)$aValue['ID'], $iId); } catch (\Exception $e) {}
-                    try { $this->transferVotes((int)$aValue['ID'], $iId); } catch (\Exception $e) {}
-                    try { $this->transferReactions((int)$aValue['ID'], $iId); } catch (\Exception $e) {}
+                    $this->transferTags((int)$aValue['ID'], $iId, $this->_oConfig->_aMigrationModules[$this->_sModuleName]['type'], $this->_oConfig->_aMigrationModules[$this->_sModuleName]['keywords']);
+                    $this->transferFavorites((int)$aValue['ID'], $iId);
+                    $this->transferVotes((int)$aValue['ID'], $iId);
+                    $this->transferReactions((int)$aValue['ID'], $iId);
                 }
             } catch (\Exception $e) {
                 // Log error and continue with next photo
