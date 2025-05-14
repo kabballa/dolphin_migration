@@ -233,8 +233,8 @@
                     $this -> transferFavorites((int)$aValue['ID'], $iId);
 
                     // Additionally: transfer all relevant extra fields
-                    $this -> transferAlbumViews((int)$aValue['ID'], $iViews);
-                    $this -> transferPhotoViews((int)$aValue['ID'], $iViews);
+                    $this -> transferAlbumViews((int)$aValue['ID'], $iId);
+                    $this -> transferPhotoViews((int)$aValue['ID'], $iId);
                 }
             }
         }   
@@ -288,40 +288,38 @@
      * Transfer album views from Dolphin to UNA.
      *
      * @param int $iId Original album ID in Dolphin
-     * @param int $iViews Number of views to set in UNA
+     * @param int $iNewId New album ID in UNA
      * @return void
      */
-    private function transferAlbumViews($iId, $iViews)
+    private function transferAlbumViews($iId, $iNewId)
     {
-        // Fetch views from Dolphin's sys_albums table if not already provided
-        if ($iViews === null) {
-            $aAlbum = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
-            $iViews = (!empty($aAlbum) && isset($aAlbum['Views'])) ? (int)$aAlbum['Views'] : 0;
-        }
+        // Fetch views from Dolphin's sys_albums table
+        $aAlbum = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
+        $iViews = (!empty($aAlbum) && isset($aAlbum['Views'])) ? (int)$aAlbum['Views'] : 0;
 
         // Update the `views` field in the `bx_albums_albums` table in UNA
-        $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_albums` SET `views` = ? WHERE `id` = ?", $iViews, $iId);
-        return $this->_oDb->query($sQuery);
+        if ($this->_oDb->isFieldExists('bx_albums_albums', 'views')) {
+            $this->_oDb->query("UPDATE `bx_albums_albums` SET `views` = :views WHERE `id` = :id", array('views' => $iViews, 'id' => $iNewId));
+        }
     }
 
     /**
      * Transfer photo views from Dolphin to UNA.
      *
      * @param int $iId Original photo ID in Dolphin
-     * @param int $iViews Number of views to set in UNA
+     * @param int $iNewId New photo ID in UNA
      * @return void
      */
-    private function transferPhotoViews($iId, $iViews)
+    private function transferPhotoViews($iId, $iNewId)
     {
-        // Fetch views from Dolphin's bx_photos_main table if not already provided
-        if ($iViews === null) {
-            $aPhoto = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
-            $iViews = (!empty($aPhoto) && isset($aPhoto['Views'])) ? (int)$aPhoto['Views'] : 0;
-        }
+        // Fetch views from Dolphin's bx_photos_main table
+        $aPhoto = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
+        $iViews = (!empty($aPhoto) && isset($aPhoto['Views'])) ? (int)$aPhoto['Views'] : 0;
 
         // Update the `views` field in the `bx_albums_files` table in UNA
-        $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_files` SET `views` = ? WHERE `id` = ?", $iViews, $iId);
-        return $this->_oDb->query($sQuery);
+        if ($this->_oDb->isFieldExists('bx_albums_files', 'views')) {
+            $this->_oDb->query("UPDATE `bx_albums_files` SET `views` = :views WHERE `id` = :id", array('views' => $iViews, 'id' => $iNewId));
+        }
     }
 
     /**
