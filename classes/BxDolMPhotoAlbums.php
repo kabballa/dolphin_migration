@@ -295,34 +295,48 @@
      * ---------------- Additionally: transfer all relevant extra fields start
      */
 
-    private function transferAlbumViews($iId, $iNewId)
+    /**
+     * Transfer album views from Dolphin to UNA.
+     *
+     * @param int $iAlbumId Original album ID in Dolphin
+     * @param int $iNewAlbumId New album ID in UNA
+     * @return bool|int
+     */
+    private function transferAlbumViews($iAlbumId, $iNewAlbumId)
     {
-        // Fetch views from Dolphin's sys_albums table
-        $aAlbum = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
-        if (!$aAlbum || !isset($aAlbum['Views']))
-            return;
+        // Get the view count from sys_albums
+        $aData = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iAlbumId));
+        if (empty($aData) || !isset($aData['Views']))
+            return false;
 
-        $iViews = (int)$aAlbum['Views'];
-
-        // Update the `views` field in the `bx_albums_albums` table in UNA only if field exists and IDs are valid
-        if ($iNewId && $this->_oDb->isFieldExists('bx_albums_albums', 'views')) {
-            $this->_oDb->query("UPDATE `bx_albums_albums` SET `views` = :views WHERE `id` = :id", array('views' => $iViews, 'id' => $iNewId));
+        // Update the view count in bx_albums_albums
+        if ($this->_oDb->isFieldExists('bx_albums_albums', 'views')) {
+            $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_albums` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewAlbumId);
+            return $this->_oDb->query($sQuery);
         }
+        return false;
     }
 
-    private function transferPhotoViews($iId, $iNewId)
+    /**
+     * Transfer photo views from Dolphin to UNA.
+     *
+     * @param int $iPhotoId Original photo ID in Dolphin
+     * @param int $iNewPhotoId New photo ID in UNA
+     * @return bool|int
+     */
+    private function transferPhotoViews($iPhotoId, $iNewPhotoId)
     {
-        // Fetch views from Dolphin's bx_photos_main table
-        $aPhoto = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
-        if (!$aPhoto || !isset($aPhoto['Views']))
-            return;
+        // Get the view count from bx_photos_main
+        $aData = $this->_mDb->getRow("SELECT `Views` FROM `bx_photos_main` WHERE `ID` = :id LIMIT 1", array('id' => $iPhotoId));
+        if (empty($aData) || !isset($aData['Views']))
+            return false;
 
-        $iViews = (int)$aPhoto['Views'];
-
-        // Update the `views` field in the `bx_albums_files` table in UNA only if field exists and IDs are valid
-        if ($iNewId && $this->_oDb->isFieldExists('bx_albums_files', 'views')) {
-            $this->_oDb->query("UPDATE `bx_albums_files` SET `views` = :views WHERE `id` = :id", array('views' => $iViews, 'id' => $iNewId));
+        // Update the view count in bx_albums_files
+        if ($this->_oDb->isFieldExists('bx_albums_files', 'views')) {
+            $sQuery = $this->_oDb->prepare("UPDATE `bx_albums_files` SET `views` = ? WHERE `id` = ?", $aData['Views'], $iNewPhotoId);
+            return $this->_oDb->query($sQuery);
         }
+        return false;
     }
 
     /**
