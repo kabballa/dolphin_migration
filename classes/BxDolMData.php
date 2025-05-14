@@ -633,6 +633,24 @@ class BxDolMData
     function getFieldType($sFieldName){
         return $this->_mDb->getOne("SELECT `Type` FROM `sys_profile_fields` WHERE `Name`=:name LIMIT 1", array('name' => $sFieldName));
     }
+
+    // Centralized logging function
+    /**
+     * Logs a message to a module-specific or general migration log file.
+     *
+     * @param string $sMessage The message to log.
+     * @param string $sModule Optional module name for context, defaults to $this->_sModuleName.
+     * @param string $sContext Optional additional context (e.g., item IDs).
+     * @param string $sLogFileName Optional specific log file name. If empty, uses a default.
+     */
+    protected function _logMessage($sMessage, $sModule = '', $sContext = '', $sLogFileName = '')
+    {
+        $sModuleLogName = $sModule ?: $this->_sModuleName ?: 'general';
+        $sEffectiveLogFile = BX_DIRECTORY_PATH_ROOT . 'logs/' . ($sLogFileName ?: "dolphin_migration_{$sModuleLogName}.log");
+
+        $sLogEntry = "[" . date('Y-m-d H:i:s') . "] [" . ucfirst($sModuleLogName) . " Migration] " . ($sContext ? "[{$sContext}] " : "") . $sMessage . "\n";
+        file_put_contents($sEffectiveLogFile, $sLogEntry, FILE_APPEND);
+    }
 }
    
 /** @} */
