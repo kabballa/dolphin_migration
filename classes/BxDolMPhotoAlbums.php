@@ -476,22 +476,24 @@
      *
      * @return int Number of records removed
      */
-    public function removeContent()
-    {
-        if (!$this -> _oDb -> isTableExists($this -> _sTableWithTransKey) || !$this -> _oDb -> isFieldExists($this -> _sTableWithTransKey, $this -> _sTransferFieldIdent))
-            return false;
-        $aRecords = $this -> _oDb -> getAll("SELECT * FROM `{$this -> _sTableWithTransKey}` WHERE `{$this -> _sTransferFieldIdent}` !=0");
-        $iNumber = 0;
-        if (!empty($aRecords))
-        {
-            foreach($aRecords as $iKey => $aValue)
-            {
-                BxDolService::call('bx_albums', 'delete_entity', array($aValue['id']));
-                $iNumber++;
-            }
-        }
-        parent::removeContent();
-        return $iNumber;
-    }
+	public function removeContent()
+	{
+		if (!$this -> _oDb -> isTableExists($this -> _sTableWithTransKey) || !$this -> _oDb -> isFieldExists($this -> _sTableWithTransKey, $this -> _sTransferFieldIdent))
+			return false;
+
+		$aRecords = $this -> _oDb -> getAll("SELECT * FROM `{$this -> _sTableWithTransKey}` WHERE `{$this -> _sTransferFieldIdent}` !=0");
+		$iNumber = 0;		
+		if (!empty($aRecords))
+		{		
+			foreach($aRecords as $iKey => $aValue)
+			{
+				BxDolService::call('bx_albums', 'delete_entity', array($aValue['id']));
+				$iNumber++;
+			}
+		}
+
+		parent::removeContent();
+		return $iNumber;
+	}
 }
 /** @} */
