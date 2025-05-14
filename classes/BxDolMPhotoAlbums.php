@@ -242,6 +242,17 @@
       return $iTransferred;
    }
 
+    /**
+     * Transfers a photo's favorite record to the new albums favorites media track table.
+     *
+     * This method retrieves the favorite record for a given photo ID from the `bx_photos_favorites` table,
+     * checks if the associated profile exists, and then inserts a new record into the `bx_albums_favorites_media_track` table
+     * with the new media ID, author ID, and date.
+     *
+     * @param int $iPhotoId The ID of the photo whose favorite record is to be transferred.
+     * @param int $iNewID The new media ID to associate with the favorite record.
+     * @return bool|int Returns false if the transfer fails, or the result of the insert query on success.
+     */
     private function transferFavorites($iPhotoId, $iNewID){
         $aData = $this->_mDb->getRow("SELECT * FROM `bx_photos_favorites` WHERE `ID`=:id LIMIT 1", array('id' => $iPhotoId));
         if (empty($aData))
@@ -295,10 +306,13 @@
     {
         // Fetch views from Dolphin's sys_albums table
         $aAlbum = $this->_mDb->getRow("SELECT `Views` FROM `sys_albums` WHERE `ID` = :id LIMIT 1", array('id' => $iId));
-        $iViews = (!empty($aAlbum) && isset($aAlbum['Views'])) ? (int)$aAlbum['Views'] : 0;
+        if (!$aAlbum || !isset($aAlbum['Views']))
+            return;
 
-        // Update the `views` field in the `bx_albums_albums` table in UNA
-        if ($this->_oDb->isFieldExists('bx_albums_albums', 'views')) {
+        $iViews = (int)$aAlbum['Views'];
+
+        // Update the `views` field in the `bx_albums_albums` table in UNA only if field exists and IDs are valid
+        if ($iNewId && $this->_oDb->isFieldExists('bx_albums_albums', 'views')) {
             $this->_oDb->query("UPDATE `bx_albums_albums` SET `views` = :views WHERE `id` = :id", array('views' => $iViews, 'id' => $iNewId));
         }
     }
