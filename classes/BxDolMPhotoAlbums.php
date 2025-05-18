@@ -233,7 +233,7 @@
                     $this -> transferFavorites((int)$aValue['ID'], $iId);
 
                     // Additionally: transfer all relevant extra fields
-                    $this -> transferAlbumViews((int)$aValue['ID'], $iId);
+                    /// $this -> transferAlbumViews((int)$aValue['ID'], $iId);
                     $this -> transferPhotoViews((int)$aValue['ID'], $iId);
                 }
             }
